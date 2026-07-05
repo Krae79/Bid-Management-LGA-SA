@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Haskoning Bid Management Tool</title>
+<style>
+  :root{
+    --navy:#0b2942; --blue:#0f5c8c; --teal:#0f8c8c; --accent:#e8792f;
+    --bg:#f3f6f8; --card:#ffffff; --border:#dbe3ea; --text:#1c2b36; --muted:#5b6b78;
+    --red:#c0392b; --amber:#b7791f; --green:#1e7d4f;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Segoe UI,Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);}
+  header.topbar{background:var(--navy);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  header.topbar h1{font-size:18px;margin:0;font-weight:600;letter-spacing:.3px;}
+  header.topbar .sub{font-size:12px;color:#9fb7c9;margin-top:2px;}
+  header.topbar .actions button{margin-left:8px;}
+  button{cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:6px;padding:7px 12px;font-size:13px;font-weight:500;transition:.15s;}
+  button:hover{background:var(--bg);}
+  button.primary{background:var(--blue);border-color:var(--blue);color:#fff;}
+  button.primary:hover{background:#0c4a72;}
+  button.accent{background:var(--accent);border-color:var(--accent);color:#fff;}
+  button.accent:hover{background:#c9631d;}
+  button.ghost{background:transparent;border-color:transparent;color:#cfe0ec;}
+  button.ghost:hover{background:rgba(255,255,255,.12);}
+  button.danger{color:var(--red);}
+  button.small{padding:4px 9px;font-size:12px;}
+  main{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
+
+  /* Dashboard */
+  .dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:16px;}
+  .proj-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .proj-card h3{margin:0;font-size:15px;color:var(--navy);}
+  .proj-card .code{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+  .proj-card .client{font-size:13px;color:var(--muted);}
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+  .badge.red{background:#fbe4e1;color:var(--red);}
+  .badge.amber{background:#faf0d8;color:var(--amber);}
+  .badge.green{background:#e1f3e8;color:var(--green);}
+  .badge.grey{background:#eceff2;color:var(--muted);}
+  .meta-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);}
+  .progress-bar{height:7px;background:#e7edf1;border-radius:5px;overflow:hidden;}
+  .progress-bar > div{height:100%;background:var(--teal);}
+  .proj-card .card-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .new-card{border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px;min-height:150px;cursor:pointer;border-radius:10px;}
+  .new-card:hover{background:#eef3f6;color:var(--blue);border-color:var(--blue);}
+
+  /* Project detail */
+  .proj-header{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-top:14px;}
+  .proj-header .top-row{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;}
+  .field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:12px;}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);margin-bottom:3px;}
+  input,select,textarea{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px;font-family:inherit;background:#fff;color:var(--text);}
+  textarea{resize:vertical;min-height:56px;line-height:1.4;}
+  .tabs{display:flex;gap:4px;margin-top:18px;border-bottom:2px solid var(--border);flex-wrap:wrap;}
+  .tabs button{border:none;background:none;padding:9px 14px;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;border-radius:0;margin-bottom:-2px;}
+  .tabs button.active{color:var(--blue);border-bottom-color:var(--blue);font-weight:600;}
+  .tab-panel{background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;padding:20px;}
+
+  .section{margin-bottom:22px;}
+  .section h4{margin:0 0 8px;font-size:13.5px;color:var(--navy);border-left:3px solid var(--teal);padding-left:8px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:700px){.two-col{grid-template-columns:1fr;}}
+
+  table.data-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.data-table th{text-align:left;background:#eef3f6;color:var(--navy);padding:7px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--border);}
+  table.data-table td{padding:5px 6px;border-bottom:1px solid #edf1f4;vertical-align:top;}
+  table.data-table td input, table.data-table td select, table.data-table td textarea{border:1px solid transparent;background:transparent;padding:4px 5px;}
+  table.data-table td input:hover, table.data-table td select:hover, table.data-table td textarea:hover,
+  table.data-table td input:focus, table.data-table td select:focus, table.data-table td textarea:focus{border-color:var(--border);background:#fff;}
+  table.data-table tr:hover td{background:#f8fbfc;}
+  .row-actions{white-space:nowrap;}
+
+  .status-pill{padding:3px 8px;border-radius:5px;font-size:11.5px;font-weight:600;border:none;}
+  .status-Not\ started{background:#eceff2;color:var(--muted);}
+  .status-In\ progress{background:#dcecfb;color:#1a5a94;}
+  .status-Blocked{background:#fbe4e1;color:var(--red);}
+  .status-Complete{background:#e1f3e8;color:var(--green);}
+
+  .list-editor .item-row{display:flex;gap:6px;margin-bottom:6px;align-items:flex-start;}
+  .list-editor .item-row textarea{flex:1;min-height:38px;}
+
+  .stat-strip{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;}
+  .stat-box{background:#f7fafb;border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:130px;}
+  .stat-box .num{font-size:19px;font-weight:700;color:var(--navy);}
+  .stat-box .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;}
+
+  .add-btn{margin-top:8px;}
+  .helptext{font-size:11.5px;color:var(--muted);margin-top:-4px;margin-bottom:8px;}
+  .callout{background:#fff6ec;border:1px solid #f0d6b3;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#7a4d10;margin-bottom:14px;}
+  .callout.blue{background:#eaf3fa;border-color:#c6dcec;color:#1a4f70;}
+  a.linklike{color:var(--blue);cursor:pointer;text-decoration:underline;font-size:12.5px;}
+  footer.app-footer{text-align:center;color:var(--muted);font-size:11px;padding:20px;}
+  .empty-hint{color:var(--muted);font-size:12.5px;font-style:italic;}
+</style>
+</head>
+<body>
+<div id="lockScreen" style="position:fixed;inset:0;background:#0b2942;display:flex;align-items:center;justify-content:center;z-index:9999;">
+  <div style="background:#fff;border-radius:12px;padding:32px 36px;max-width:340px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,.3);text-align:center;">
+    <div style="font-weight:700;color:#0b2942;font-size:16px;margin-bottom:6px;">Haskoning Bid Management Tool</div>
+    <div style="color:#5b6b78;font-size:12.5px;margin-bottom:18px;">This tool contains confidential bid information. Enter the passcode to continue.</div>
+    <input type="password" id="lockInput" placeholder="Passcode" style="width:100%;padding:9px 10px;border:1px solid #dbe3ea;border-radius:6px;font-size:14px;margin-bottom:10px;" autofocus>
+    <button class="primary" style="width:100%;padding:9px;" onclick="checkPasscode()">Unlock</button>
+    <div id="lockError" style="color:#c0392b;font-size:12px;margin-top:8px;display:none;">Incorrect passcode — try again.</div>
+  </div>
+</div>
+<div id="appShell" style="display:none;">
+<header class="topbar">
+  <div>
+    <h1>Haskoning Bid Management Tool</h1>
+    <div class="sub" id="headerSub">Climate Transition Practice — proposal &amp; bid tracking</div>
+  </div>
+  <div class="actions">
+    <button class="ghost" onclick="App.goDashboard()">Dashboard</button>
+    <button class="ghost" onclick="App.exportAll()">Export all (JSON)</button>
+    <button class="ghost" onclick="document.getElementById('importFile').click()">Import</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none" onchange="App.importAll(event)">
+  </div>
+</header>
+<main id="app"></main>
+<footer class="app-footer">Data is saved locally in this browser. Use "Export all (JSON)" regularly to back up or move between devices.</footer>
+</div>
+
+<script>
+/* ---------------- Access passcode (deterrent only, not real security — change PASSCODE below) ---------------- */
+const PASSCODE = "haskoning2026";
+function checkPasscode(){
+  const val = document.getElementById('lockInput').value;
+  if(val === PASSCODE){
+    sessionStorage.setItem('bidToolUnlocked','1');
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('appShell').style.display = '';
+  } else {
+    document.getElementById('lockError').style.display = 'block';
+  }
+}
+document.getElementById('lockInput').addEventListener('keydown', e => { if(e.key === 'Enter') checkPasscode(); });
+if(sessionStorage.getItem('bidToolUnlocked') === '1'){
+  document.getElementById('lockScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = '';
+}
+
+/* ---------------- Data model & seed content ---------------- */
+
+function uid(){ return 'id' + Math.random().toString(36).slice(2,10); }
+
+function blankReverseBrief(){
+  return {
+    situation:'', complication:'', question:'', answer:'',
+    keyMessages: [],
+    evaluationWeighting: [],
+    scopeIn: [], scopeOut: [],
+    constraints: [],
+    openQuestions: [],
+    lodgement: { tenderCode:'', method:'', closingTime:'', contact:'', lastQueryDate:'', notes:'' }
+  };
+}
+
+function blankProject(overrides){
+  const base = {
+    id: uid(),
+    name: 'New Proposal',
+    client: '',
+    tenderCode: '',
+    internalRef: '',
+    submissionDate: '',
+    submissionTime: '',
+    internalDeadline: '',
+    devBudgetCap: 0,
+    contractBudgetCap: 0,
+    deliveryWindow: '',
+    status: 'Active',
+    reverseBrief: blankReverseBrief(),
+    tasks: [],
+    budget: [],
+    team: [],
+    risks: []
+  };
+  return Object.assign(base, overrides || {});
+}
+
+function seedTemplateProject(){
+  const p = blankProject({
+    name: 'TEMPLATE — copy this for a new bid',
+    client: '(client name)',
+    tenderCode: '(tender / RFQ code)',
+    status: 'Template'
+  });
+  p.tasks = [
+    {id:uid(), phase:'A. Kick off', activity:'Kick off meeting — confirm scope, reverse brief, budget shape, task list', owner:'', support:'', due:'', status:'Not started', comments:''},
+    {id:uid(), phase:'A. Methodology', activity:'Methodology refined and signed off', owner:'', support:'', due:'', status:'Not started', comments:''},
+    {id:uid(), phase:'B. Drafting', activity:'Full proposal narrative drafted', owner:'', support:'', due:'', status:'Not started', comments:''},
+    {id:uid(), phase:'C. Budget & commercial', activity:'Hours/cost table, insurance, ABN, rate card confirmed', owner:'', support:'', due:'', status:'Not started', comments:''},
+    {id:uid(), phase:'D. Finalise', activity:'Value add, CVs, subcontractors, referees finalised', owner:'', support:'', due:'', status:'Not started', comments:''},
+    {id:uid(), phase:'E. QA', activity:'QA review against evaluation criteria', owner:'', support:'', due:'', status:'Not started', comments:''},
+    {id:uid(), phase:'F. Lodge', activity:'Final export, compliance check, upload, receipt saved', owner:'', support:'', due:'', status:'Not started', comments:''}
+  ];
+  p.budget = [
+    {id:uid(), resource:'', rate:0, hours:0}
+  ];
+  p.team = [
+    {id:uid(), name:'', role:'', rate:0}
+  ];
+  p.risks = [
+    {id:uid(), risk:'', mitigation:'', owner:''}
+  ];
+  return p;
+}
+
+function seedLGA058959(){
+  const p = blankProject({
+    name: 'Embedding Climate Risk into Governance & Financial Decision-Making',
+    client: 'LGA South Australia (co-funded: LGA Mutual, Asset Mutual Fund, Local Government Risk Services, LGFA, SA Local Govt Financial Mgmt Group, SA Local Govt Auditors Group)',
+    tenderCode: 'Tenders SA LGA058959 (internal ref ECM 866093)',
+    internalRef: 'ECM 866093',
+    submissionDate: '2026-07-16',
+    submissionTime: '2:00 PM ACST',
+    internalDeadline: '2026-07-16 12:00 PM (2 hr buffer before 2pm close)',
+    devBudgetCap: 3500,
+    contractBudgetCap: 70000,
+    deliveryWindow: 'July – November 2026 (5 month delivery window if awarded)',
+    status: 'Active'
+  });
+
+  p.reverseBrief = {
+    situation: 'LGA South Australia has issued RFQ ECM 866093 (Tenders SA code LGA058959), seeking a consultant to design a practical, scalable approach that embeds climate-related risk into governance, planning, asset management and financial decision-making across its 68 member councils. Haskoning has decided to bid.',
+    complication: 'Nine working days from kick-off (Mon 6 Jul) to lodgement (2pm Thu 16 Jul 2026). Proposal development budget capped at $3,500. Stella must define methodology before the narrative can be written. Tenders SA categorises the tender 75% across corporate finance / risk management / financial asset management vs 25% environmental advisory — the proposal must read as financial governance work, not a climate report.',
+    question: 'How does Haskoning sequence a compliant, competitive, full proposal within nine working days and a $3,500 development budget, with clearly owned tasks and hours for each team member?',
+    answer: 'Run a five-phase, gated sequence anchored on assets Haskoning already holds: Stella\'s draft nine-stage method (DEFINE, DESIGN, BUILD, VALIDATE, INTEGRATE, DELIVER & ENABLE) and the Commonwealth CROMP digital risk tool, adapted rather than built from scratch. Close the $20k gap between the draft method\'s stage budgets ($90k) and the RFQ\'s $70k cap first, then draft (Katrina/Lien), commercial input in parallel (Zoe/Alan), one QA pass (Wed 15 Jul), lodge by 12 noon Thu 16 Jul.',
+    keyMessages: [
+      'The methodology largely exists — Stella\'s draft nine-stage method maps cleanly to the RFQ\'s required deliverables, and the CROMP tool provides a Commonwealth-endorsed toolkit backbone, strengthening the 40% methodology score and de-risking the timeline.',
+      'The draft method is at least $20k over budget — stage budgets total $90,000 against the $70,000 ex GST cap with no profit or contingency. If Haskoning\'s standard on-cost stack (PA4540: 5% contingency, 3% profit, 10% PM) applies, the effective gap is $31k. Pricing basis, then rescope, is the decision sequence for kick-off.',
+      'Position the bid as financial governance work — the 75% corporate finance/risk/asset weighting on Tenders SA plays to the gap CROMP leaves open (financial consequence translation), which is exactly where Haskoning differentiates.'
+    ],
+    evaluationWeighting: [
+      {criterion:'Methodology and proposed outputs', weight:'40%'},
+      {criterion:'Relevant experience and technical capability', weight:'40%'},
+      {criterion:'Engagement approach', weight:'10%'},
+      {criterion:'Value for money', weight:'10%'}
+    ],
+    scopeIn: [
+      'Practical tools embedding climate risk into risk registers, asset management plans, long-term financial plans, strategic planning and annual reporting',
+      'A tiered pathway — accessible baseline for resource-constrained councils, advanced pathway toward AASB S2 / IPSASB SRS1 alignment',
+      'Structured engagement: Steering Group (monthly), CEO Advisory Group session, one cross-functional workshop, testing with regional/lower-capacity councils',
+      'Leadership and governance material — concise briefing content for executives and elected members'
+    ],
+    scopeOut: [
+      'Detailed climate modelling or new climate projections',
+      'Development of a full climate disclosure compliance framework'
+    ],
+    constraints: [
+      {item:'Project budget', detail:'$70,000 excluding GST for the delivery contract (separate to the $3,500 proposal development budget)'},
+      {item:'Delivery window', detail:'July to November 2026'},
+      {item:'Steering Group', detail:'Minimum one hour monthly'},
+      {item:'CEO Advisory Group', detail:'Minimum one session — LGA notes Thursday 6 August as a possible slot'},
+      {item:'Council workshop', detail:'One cross-functional workshop covering risk, finance, asset management, sustainability and governance functions'},
+      {item:'Field testing', detail:'Draft outputs tested with regional or lower-capacity councils before finalisation'},
+      {item:'IP', detail:'Outputs owned by LGA South Australia on completion; Haskoning may reference in portfolio but cannot commercialise without prior approval'}
+    ],
+    openQuestions: [
+      {text:'Budget gap: draft method totals $90k vs $70k ex GST cap. Which stages absorb the $20k reduction? (illustrative rescope: baseline assessment and capability building take the largest cuts)', done:false},
+      {text:'CROMP positioning: name CROMP explicitly as the adapted foundation? Adaptation story (SA localisation, financial consequence depth, tiering for low-capacity councils) must be explicit so the bid doesn\'t read as reselling a free government tool.', done:false},
+      {text:'On-cost treatment: standard PA4540 stack (contingency 5% + profit 3% + PM 10% = 18%) vs at-cost. Determines whether labour envelope is ~$59k or $70k — Alan to confirm.', done:false},
+      {text:'Nominated personnel: confirm lead consultant and project team beyond Stella/Katrina; is Lien nominated personnel or internal support only? Public-facing hourly rates need Alan\'s sign-off.', done:false},
+      {text:'Referees: up to three, ideally recent local government climate risk or financial sustainability work — confirm who Katrina should approach.', done:false}
+    ],
+    lodgement: {
+      tenderCode: 'LGA058959 on Tenders SA (internal ref ECM 866093) — verify both codes before uploading',
+      method: 'Tenders SA portal only, via "Click here to submit an electronic response". No direct email submissions. Standard formats only (Word/Excel/PDF); each upload ≤10MB — target a single PDF under 10MB, compress images/org charts.',
+      closingTime: '2:00 PM, Thursday 16 July 2026 (late quotations considered only at LGA\'s discretion). Internal target: upload complete by 12:00 noon for a 2-hour buffer.',
+      contact: 'Anna Rogers, Climate Change Support Advisor, LGA South Australia — all queries and communication must go through her in writing. Approaching other LGA staff risks disqualification.',
+      lastQueryDate: 'Thursday 16 July 2026 (same day as closing) — seek clarifications early next week, not in the final days.',
+      notes: 'Escalation if portal misbehaves: SA Tenders and Contracts Helpdesk, (08) 8462 1401. A successful upload produces an on-screen receipt and an emailed receipt number — save both immediately as proof of lodgement.'
+    }
+  };
+
+  p.tasks = [
+    {id:uid(), phase:'A. Kick off', activity:'Kick off meeting: pack reviewed, reverse brief confirmed, $20k budget gap decision made (rescope to $70k or $70k core + $20k Value Add), CROMP positioning agreed, task list locked', owner:'Stella, Katrina, Alan', support:'', due:'2026-07-06', status:'Not started', comments:'Critical path gate 1'},
+    {id:uid(), phase:'A. Methodology', activity:'Refine and sign off the draft nine-stage method with agreed budget shape; confirm CROMP adaptation narrative and tiered pathway logic; hand to Katrina', owner:'Stella', support:'', due:'2026-07-07', status:'Not started', comments:'Critical path gate 2'},
+    {id:uid(), phase:'B. Drafting', activity:'Full proposal narrative: understanding of project, methodology write-up, integration into council systems, governance/leadership section', owner:'Katrina', support:'Lien', due:'2026-07-10', status:'Not started', comments:''},
+    {id:uid(), phase:'B. Drafting', activity:'Research SA council examples, ESCOSA references; draft engagement section skeleton', owner:'Lien', support:'', due:'2026-07-10', status:'Not started', comments:''},
+    {id:uid(), phase:'C. Budget & commercial', activity:'Compile itemised hours/cost table for the RFQ budget schedule, support resourcing/personnel sections', owner:'Zoe', support:'', due:'2026-07-10', status:'Not started', comments:'BAU, not costed to $3,500 pool'},
+    {id:uid(), phase:'C. Budget & commercial', activity:'Confirm insurance details, ABN, rate card and on-cost treatment for the $70k bid', owner:'Alan', support:'', due:'2026-07-10', status:'Not started', comments:'BAU, not costed to $3,500 pool'},
+    {id:uid(), phase:'D. Finalise', activity:'Value add, project team CVs, subcontractors, referees finalised; full draft assembled', owner:'Katrina', support:'Lien', due:'2026-07-14', status:'Not started', comments:''},
+    {id:uid(), phase:'E. QA', activity:'Review complete draft against evaluation criteria; incorporate final edits', owner:'Stella, Alan', support:'Katrina', due:'2026-07-15', status:'Not started', comments:'Single QA checkpoint — includes sub-10MB file size check'},
+    {id:uid(), phase:'F. Lodge', activity:'Final PDF export (<10MB), compliance checklist re-run, upload against LGA058959 via Tenders SA, save receipt + receipt number email', owner:'Katrina', support:'', due:'2026-07-16', status:'Not started', comments:'By 12 noon — 2 hr buffer before 2pm close'}
+  ];
+
+  p.budget = [
+    {id:uid(), resource:'Stella Whittaker — refine/sign off methodology, budget decision, final QA', rate:280, hours:4},
+    {id:uid(), resource:'Katrina Rae — author full proposal, coordinate inputs, assemble & lodge', rate:130, hours:14},
+    {id:uid(), resource:'Lien — CROMP mapping, research, engagement draft, formatting', rate:34, hours:16}
+  ];
+
+  p.team = [
+    {id:uid(), name:'Dr Stella Whittaker', role:'Methodology & QA', rate:280},
+    {id:uid(), name:'Katrina Rae', role:'Full proposal author & coordinator (Accountable)', rate:130},
+    {id:uid(), name:'Lien', role:'Research & drafting support', rate:34},
+    {id:uid(), name:'Zoe Zollinger', role:'Project management & budget compilation (BAU)', rate:140},
+    {id:uid(), name:'Alan', role:'Commercial approval (BAU)', rate:0}
+  ];
+
+  p.risks = [
+    {id:uid(), risk:'Draft method budget ($90k) exceeds the $70k ex GST cap — $20k gap at cost, up to $31k if standard on-cost stack applies', mitigation:'Decide at kick-off between Section 4.3 rescope and $70k core + $20k Value Add structure; Alan present or reachable for the commercial call', owner:'Stella, Alan'},
+    {id:uid(), risk:'Bid reads as reselling a free Commonwealth tool (CROMP)', mitigation:'Lead methodology narrative with the adaptation/differentiation story: SA localisation, financial consequence depth, governance response for council instruments, tiering for low-capacity councils', owner:'Stella, Katrina'},
+    {id:uid(), risk:'Methodology sign-off slips past Tue 7 Jul', mitigation:'Protect as a critical path gate at kick-off; escalate immediately if at risk', owner:'Stella'},
+    {id:uid(), risk:'On-cost basis unresolved — standard 18% stack would shrink labour envelope to ~$59k and deepen the rescope', mitigation:'Alan confirms on-cost treatment at or before kick-off, before stage rescoping is finalised', owner:'Alan'},
+    {id:uid(), risk:'Referees not yet identified', mitigation:'Stella to nominate up to three recent, relevant referees at kick-off so Lien can begin outreach early next week', owner:'Stella'},
+    {id:uid(), risk:'Upload failure, oversize file or no receipt at lodgement', mitigation:'File size check in Wed QA (single PDF <10MB); upload by 12 noon Thu for a 2-hr buffer; retry on missing receipt; escalate to SA Tenders Helpdesk (08) 8462 1401; save on-screen receipt + email as proof', owner:'Katrina'},
+    {id:uid(), risk:'Proposal reads as an environmental report rather than financial governance work', mitigation:'Adopt 75% finance/risk/asset positioning at kick-off; Wed 15 Jul QA explicitly checks each section leads with financial sustainability language', owner:'Stella, Katrina'}
+  ];
+
+  return p;
+}
+
+/* ---------------- State management ---------------- */
+
+const STORAGE_KEY = 'bidToolState_v1';
+let state = null;
+
+function loadState(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(raw){
+    try { state = JSON.parse(raw); return; } catch(e){ /* fall through to seed */ }
+  }
+  state = { currentProjectId: null, activeTab: 'overview', projects: [ seedTemplateProject(), seedLGA058959() ] };
+  saveState();
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function getProject(id){ return state.projects.find(p => p.id === id); }
+function getPath(obj, path){
+  return path.split('.').reduce((o,k)=> (o==null?undefined:o[k]), obj);
+}
+function setPath(obj, path, value){
+  const parts = path.split('.');
+  let cur = obj;
+  for(let i=0;i<parts.length-1;i++){ cur = cur[parts[i]]; }
+  cur[parts[parts.length-1]] = value;
+}
+
+/* ---------------- Helpers ---------------- */
+
+function esc(str){
+  return String(str==null?'':str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+function fmtMoney(n){ n = Number(n)||0; return '$' + n.toLocaleString(undefined,{maximumFractionDigits:0}); }
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  if(isNaN(d)) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((d - today) / 86400000);
+}
+function deadlineBadge(dateStr){
+  const d = daysUntil(dateStr);
+  if(d===null) return '<span class="badge grey">No date set</span>';
+  if(d < 0) return '<span class="badge grey">Closed</span>';
+  if(d <= 2) return `<span class="badge red">${d} day${d===1?'':'s'} to submit</span>`;
+  if(d <= 6) return `<span class="badge amber">${d} days to submit</span>`;
+  return `<span class="badge green">${d} days to submit</span>`;
+}
+function taskCompletion(tasks){
+  if(!tasks.length) return 0;
+  const done = tasks.filter(t=>t.status==='Complete').length;
+  return Math.round(done/tasks.length*100);
+}
+function budgetTotal(rows){
+  return rows.reduce((s,r)=> s + (Number(r.rate)||0)*(Number(r.hours)||0), 0);
+}
+
+/* ---------------- Rendering: Dashboard ---------------- */
+
+function renderDashboard(){
+  let cards = state.projects.map(p => {
+    const pct = taskCompletion(p.tasks);
+    const used = budgetTotal(p.budget);
+    const cap = Number(p.devBudgetCap)||0;
+    const overBudget = cap>0 && used>cap;
+    return `
+    <div class="proj-card">
+      <div class="code">${esc(p.tenderCode||'No tender code')} ${p.status==='Template'?'<span class="badge grey">TEMPLATE</span>':''}</div>
+      <h3>${esc(p.name)}</h3>
+      <div class="client">${esc(p.client||'—')}</div>
+      <div class="meta-row"><span>Submission</span><span>${p.submissionDate?esc(p.submissionDate)+(p.submissionTime?' '+esc(p.submissionTime):''):'—'}</span></div>
+      <div>${deadlineBadge(p.submissionDate)}</div>
+      <div class="meta-row"><span>Tasks complete</span><span>${pct}% (${p.tasks.filter(t=>t.status==='Complete').length}/${p.tasks.length})</span></div>
+      <div class="progress-bar"><div style="width:${pct}%"></div></div>
+      <div class="meta-row"><span>Dev budget</span><span style="color:${overBudget?'var(--red)':'inherit'}">${fmtMoney(used)} / ${fmtMoney(cap)}</span></div>
+      <div class="card-actions">
+        <button class="primary small" onclick="App.openProject('${p.id}')">Open</button>
+        <button class="small" onclick="App.duplicateProject('${p.id}')">Duplicate as new project</button>
+        <button class="small danger" onclick="App.deleteProject('${p.id}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="callout blue">This tool tracks every proposal/bid from kick-off to lodgement. Click <b>Duplicate as new project</b> on the TEMPLATE card (or any past bid) whenever a new RFQ lands, then edit the copy with the new job's details.</div>
+    <div class="dash-grid">
+      ${cards}
+      <div class="new-card" onclick="App.newProject()">+ New project from blank template</div>
+    </div>`;
+}
+
+/* ---------------- Rendering: Project detail ---------------- */
+
+function renderProject(p){
+  const tabs = [
+    ['overview','Overview & Reverse Brief'],
+    ['schedule','Schedule & Tasks'],
+    ['budget','Budget'],
+    ['team','Team & RACI'],
+    ['risks','Risks & Assumptions']
+  ];
+  const active = state.activeTab || 'overview';
+
+  const tabBtns = tabs.map(([k,label]) =>
+    `<button class="${active===k?'active':''}" onclick="App.setTab('${k}')">${label}</button>`).join('');
+
+  let panel = '';
+  if(active==='overview') panel = renderOverviewTab(p);
+  else if(active==='schedule') panel = renderScheduleTab(p);
+  else if(active==='budget') panel = renderBudgetTab(p);
+  else if(active==='team') panel = renderTeamTab(p);
+  else if(active==='risks') panel = renderRisksTab(p);
+
+  return `
+    <button onclick="App.goDashboard()">&larr; All projects</button>
+    <div class="proj-header">
+      <div class="top-row">
+        <div class="field" style="flex:1;min-width:260px;">
+          <label>Project name</label>
+          <input value="${esc(p.name)}" onchange="App.updateField('${p.id}','name',this.value)">
+        </div>
+        <div class="field" style="width:160px;">
+          <label>Status</label>
+          <select onchange="App.updateField('${p.id}','status',this.value)">
+            ${['Active','On hold','Submitted','Won','Lost','Template'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field-grid">
+        <div class="field"><label>Client</label><input value="${esc(p.client)}" onchange="App.updateField('${p.id}','client',this.value)"></div>
+        <div class="field"><label>Tender / RFQ code</label><input value="${esc(p.tenderCode)}" onchange="App.updateField('${p.id}','tenderCode',this.value)"></div>
+        <div class="field"><label>Internal reference</label><input value="${esc(p.internalRef)}" onchange="App.updateField('${p.id}','internalRef',this.value)"></div>
+        <div class="field"><label>Submission date</label><input type="date" value="${esc(p.submissionDate)}" onchange="App.updateField('${p.id}','submissionDate',this.value)"></div>
+        <div class="field"><label>Submission time</label><input value="${esc(p.submissionTime)}" onchange="App.updateField('${p.id}','submissionTime',this.value)"></div>
+        <div class="field"><label>Internal deadline</label><input value="${esc(p.internalDeadline)}" onchange="App.updateField('${p.id}','internalDeadline',this.value)"></div>
+        <div class="field"><label>Dev budget cap ($)</label><input type="number" value="${p.devBudgetCap}" onchange="App.updateField('${p.id}','devBudgetCap',Number(this.value))"></div>
+        <div class="field"><label>Contract budget cap ($)</label><input type="number" value="${p.contractBudgetCap}" onchange="App.updateField('${p.id}','contractBudgetCap',Number(this.value))"></div>
+        <div class="field"><label>Delivery window</label><input value="${esc(p.deliveryWindow)}" onchange="App.updateField('${p.id}','deliveryWindow',this.value)"></div>
+      </div>
+      <div class="stat-strip">
+        <div class="stat-box"><div class="num">${deadlineBadge(p.submissionDate)}</div><div class="lbl">Time to submission</div></div>
+        <div class="stat-box"><div class="num">${taskCompletion(p.tasks)}%</div><div class="lbl">Tasks complete</div></div>
+        <div class="stat-box"><div class="num">${fmtMoney(budgetTotal(p.budget))}</div><div class="lbl">Dev budget used of ${fmtMoney(p.devBudgetCap)}</div></div>
+      </div>
+    </div>
+    <div class="tabs">${tabBtns}</div>
+    <div class="tab-panel">${panel}</div>
+  `;
+}
+
+function renderOverviewTab(p){
+  const rb = p.reverseBrief;
+  return `
+    <div class="callout">Condensed reverse brief — confirm this matches the RFQ before drafting starts (Pyramid Principle: situation → complication → question → answer).</div>
+
+    <div class="section">
+      <h4>Governing thought (SCQA)</h4>
+      <div class="two-col">
+        <div class="field"><label>Situation</label><textarea onchange="App.updateField('${p.id}','reverseBrief.situation',this.value)">${esc(rb.situation)}</textarea></div>
+        <div class="field"><label>Complication</label><textarea onchange="App.updateField('${p.id}','reverseBrief.complication',this.value)">${esc(rb.complication)}</textarea></div>
+        <div class="field"><label>Critical question</label><textarea onchange="App.updateField('${p.id}','reverseBrief.question',this.value)">${esc(rb.question)}</textarea></div>
+        <div class="field"><label>Governing idea (answer)</label><textarea onchange="App.updateField('${p.id}','reverseBrief.answer',this.value)">${esc(rb.answer)}</textarea></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>Key messages</h4>
+      ${renderStringList(p.id, 'reverseBrief.keyMessages', rb.keyMessages, 'Add key message')}
+    </div>
+
+    <div class="section">
+      <h4>Evaluation weighting</h4>
+      <table class="data-table"><thead><tr><th style="width:75%">Criterion</th><th>Weight</th><th></th></tr></thead><tbody>
+      ${rb.evaluationWeighting.map((row,i)=>`
+        <tr>
+          <td><input value="${esc(row.criterion)}" onchange="App.updateListItem('${p.id}','reverseBrief.evaluationWeighting',${i},'criterion',this.value)"></td>
+          <td><input value="${esc(row.weight)}" onchange="App.updateListItem('${p.id}','reverseBrief.evaluationWeighting',${i},'weight',this.value)"></td>
+          <td class="row-actions"><button class="small danger" onclick="App.removeListItem('${p.id}','reverseBrief.evaluationWeighting',${i})">✕</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      <button class="small add-btn" onclick="App.addListItem('${p.id}','reverseBrief.evaluationWeighting',{criterion:'',weight:''})">+ Add criterion</button>
+    </div>
+
+    <div class="two-col">
+      <div class="section">
+        <h4>In scope</h4>
+        ${renderStringList(p.id, 'reverseBrief.scopeIn', rb.scopeIn, 'Add in-scope item')}
+      </div>
+      <div class="section">
+        <h4>Out of scope</h4>
+        ${renderStringList(p.id, 'reverseBrief.scopeOut', rb.scopeOut, 'Add out-of-scope item')}
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>Constraints</h4>
+      <table class="data-table"><thead><tr><th style="width:25%">Constraint</th><th>Detail</th><th></th></tr></thead><tbody>
+      ${rb.constraints.map((row,i)=>`
+        <tr>
+          <td><input value="${esc(row.item)}" onchange="App.updateListItem('${p.id}','reverseBrief.constraints',${i},'item',this.value)"></td>
+          <td><textarea onchange="App.updateListItem('${p.id}','reverseBrief.constraints',${i},'detail',this.value)">${esc(row.detail)}</textarea></td>
+          <td class="row-actions"><button class="small danger" onclick="App.removeListItem('${p.id}','reverseBrief.constraints',${i})">✕</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+      <button class="small add-btn" onclick="App.addListItem('${p.id}','reverseBrief.constraints',{item:'',detail:''})">+ Add constraint</button>
+    </div>
+
+    <div class="section">
+      <h4>Open questions for kick-off</h4>
+      ${rb.openQuestions.map((q,i)=>`
+        <div class="item-row" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px;">
+          <input type="checkbox" style="width:auto;margin-top:8px;" ${q.done?'checked':''} onchange="App.updateListItem('${p.id}','reverseBrief.openQuestions',${i},'done',this.checked)">
+          <textarea style="flex:1;${q.done?'text-decoration:line-through;color:var(--muted);':''}" onchange="App.updateListItem('${p.id}','reverseBrief.openQuestions',${i},'text',this.value)">${esc(q.text)}</textarea>
+          <button class="small danger" onclick="App.removeListItem('${p.id}','reverseBrief.openQuestions',${i})">✕</button>
+        </div>`).join('')}
+      <button class="small add-btn" onclick="App.addListItem('${p.id}','reverseBrief.openQuestions',{text:'',done:false})">+ Add open question</button>
+    </div>
+
+    <div class="section">
+      <h4>Lodgement essentials</h4>
+      <div class="two-col">
+        <div class="field"><label>Tender code / portal reference</label><textarea onchange="App.updateField('${p.id}','reverseBrief.lodgement.tenderCode',this.value)">${esc(rb.lodgement.tenderCode)}</textarea></div>
+        <div class="field"><label>Method of lodgement</label><textarea onchange="App.updateField('${p.id}','reverseBrief.lodgement.method',this.value)">${esc(rb.lodgement.method)}</textarea></div>
+        <div class="field"><label>Closing time</label><textarea onchange="App.updateField('${p.id}','reverseBrief.lodgement.closingTime',this.value)">${esc(rb.lodgement.closingTime)}</textarea></div>
+        <div class="field"><label>Contact person</label><textarea onchange="App.updateField('${p.id}','reverseBrief.lodgement.contact',this.value)">${esc(rb.lodgement.contact)}</textarea></div>
+        <div class="field"><label>Last query date</label><textarea onchange="App.updateField('${p.id}','reverseBrief.lodgement.lastQueryDate',this.value)">${esc(rb.lodgement.lastQueryDate)}</textarea></div>
+        <div class="field"><label>Notes / escalation</label><textarea onchange="App.updateField('${p.id}','reverseBrief.lodgement.notes',this.value)">${esc(rb.lodgement.notes)}</textarea></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStringList(projId, path, items, addLabel){
+  return `
+    <div class="list-editor">
+      ${items.map((txt,i)=>`
+        <div class="item-row">
+          <textarea onchange="App.updateArrayItem('${projId}','${path}',${i},this.value)">${esc(txt)}</textarea>
+          <button class="small danger" onclick="App.removeArrayItem('${projId}','${path}',${i})">✕</button>
+        </div>`).join('') || '<div class="empty-hint">Nothing added yet.</div>'}
+      <button class="small add-btn" onclick="App.addArrayItem('${projId}','${path}')">+ ${addLabel}</button>
+    </div>`;
+}
+
+function renderScheduleTab(p){
+  const phases = [...new Set(p.tasks.map(t=>t.phase))];
+  return `
+    <div class="section">
+      <div class="stat-strip" style="margin-top:0;margin-bottom:14px;">
+        <div class="stat-box"><div class="num">${p.tasks.length}</div><div class="lbl">Total tasks</div></div>
+        <div class="stat-box"><div class="num">${p.tasks.filter(t=>t.status==='Complete').length}</div><div class="lbl">Complete</div></div>
+        <div class="stat-box"><div class="num">${p.tasks.filter(t=>t.status==='Blocked').length}</div><div class="lbl">Blocked</div></div>
+        <div class="stat-box"><div class="num">${taskCompletion(p.tasks)}%</div><div class="lbl">Overall progress</div></div>
+      </div>
+      <table class="data-table">
+        <thead><tr><th>Phase</th><th style="width:26%">Activity</th><th>Owner</th><th>Support</th><th>Due</th><th>Status</th><th style="width:16%">Comments</th><th></th></tr></thead>
+        <tbody>
+        ${p.tasks.map((t,i)=>`
+          <tr>
+            <td><input list="phaseList" value="${esc(t.phase)}" onchange="App.updateArrayObjField('${p.id}','tasks',${i},'phase',this.value)"></td>
+            <td><textarea onchange="App.updateArrayObjField('${p.id}','tasks',${i},'activity',this.value)">${esc(t.activity)}</textarea></td>
+            <td><input value="${esc(t.owner)}" onchange="App.updateArrayObjField('${p.id}','tasks',${i},'owner',this.value)"></td>
+            <td><input value="${esc(t.support)}" onchange="App.updateArrayObjField('${p.id}','tasks',${i},'support',this.value)"></td>
+            <td><input type="date" value="${esc(t.due)}" onchange="App.updateArrayObjField('${p.id}','tasks',${i},'due',this.value)"></td>
+            <td><select class="status-pill status-${t.status.replace(' ','\\ ')}" onchange="App.updateArrayObjField('${p.id}','tasks',${i},'status',this.value)">
+              ${['Not started','In progress','Blocked','Complete'].map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}
+            </select></td>
+            <td><textarea onchange="App.updateArrayObjField('${p.id}','tasks',${i},'comments',this.value)">${esc(t.comments)}</textarea></td>
+            <td class="row-actions"><button class="small danger" onclick="App.removeArrayObj('${p.id}','tasks',${i})">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <datalist id="phaseList">${phases.map(ph=>`<option value="${esc(ph)}">`).join('')}</datalist>
+      <button class="small add-btn" onclick="App.addArrayObj('${p.id}','tasks',{phase:'',activity:'',owner:'',support:'',due:'',status:'Not started',comments:''})">+ Add task</button>
+    </div>
+  `;
+}
+
+function renderBudgetTab(p){
+  const used = budgetTotal(p.budget);
+  const cap = Number(p.devBudgetCap)||0;
+  const over = cap>0 && used>cap;
+  return `
+    <div class="section">
+      <h4>Proposal development budget</h4>
+      <div class="helptext">Cost = rate × hours, calculated automatically. Compare the total against the development budget cap set on the project header.</div>
+      <table class="data-table">
+        <thead><tr><th style="width:45%">Resource / task</th><th>Rate ($/hr)</th><th>Hours</th><th>Cost</th><th></th></tr></thead>
+        <tbody>
+        ${p.budget.map((r,i)=>`
+          <tr>
+            <td><textarea onchange="App.updateArrayObjField('${p.id}','budget',${i},'resource',this.value)">${esc(r.resource)}</textarea></td>
+            <td><input type="number" step="0.01" value="${r.rate}" onchange="App.updateArrayObjField('${p.id}','budget',${i},'rate',Number(this.value))"></td>
+            <td><input type="number" step="0.25" value="${r.hours}" onchange="App.updateArrayObjField('${p.id}','budget',${i},'hours',Number(this.value))"></td>
+            <td>${fmtMoney((Number(r.rate)||0)*(Number(r.hours)||0))}</td>
+            <td class="row-actions"><button class="small danger" onclick="App.removeArrayObj('${p.id}','budget',${i})">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="font-weight:700;"><td colspan="3" style="text-align:right;">Total</td><td style="color:${over?'var(--red)':'var(--green)'}">${fmtMoney(used)}</td><td></td></tr></tfoot>
+      </table>
+      <button class="small add-btn" onclick="App.addArrayObj('${p.id}','budget',{resource:'',rate:0,hours:0})">+ Add line</button>
+      ${over ? `<div class="callout" style="margin-top:12px;">Over the ${fmtMoney(cap)} development budget cap by ${fmtMoney(used-cap)}.</div>` : (cap>0?`<div class="callout blue" style="margin-top:12px;">${fmtMoney(cap-used)} headroom under the ${fmtMoney(cap)} cap.</div>`:'')}
+    </div>
+    <div class="section">
+      <h4>Contract / delivery budget context</h4>
+      <div class="helptext">Reference only — the value of the contract if won, for positioning and rescoping discussions.</div>
+      <div class="stat-strip">
+        <div class="stat-box"><div class="num">${fmtMoney(p.contractBudgetCap)}</div><div class="lbl">Contract cap (ex GST)</div></div>
+        <div class="stat-box"><div class="num" style="font-size:14px;">${esc(p.deliveryWindow)||'—'}</div><div class="lbl">Delivery window</div></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTeamTab(p){
+  return `
+    <div class="section">
+      <h4>Project team &amp; rates</h4>
+      <table class="data-table">
+        <thead><tr><th style="width:30%">Name</th><th style="width:45%">Role / responsibility (RACI)</th><th>Rate ($/hr)</th><th></th></tr></thead>
+        <tbody>
+        ${p.team.map((m,i)=>`
+          <tr>
+            <td><input value="${esc(m.name)}" onchange="App.updateArrayObjField('${p.id}','team',${i},'name',this.value)"></td>
+            <td><input value="${esc(m.role)}" onchange="App.updateArrayObjField('${p.id}','team',${i},'role',this.value)"></td>
+            <td><input type="number" step="0.01" value="${m.rate}" onchange="App.updateArrayObjField('${p.id}','team',${i},'rate',Number(this.value))"></td>
+            <td class="row-actions"><button class="small danger" onclick="App.removeArrayObj('${p.id}','team',${i})">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="small add-btn" onclick="App.addArrayObj('${p.id}','team',{name:'',role:'',rate:0})">+ Add team member</button>
+    </div>
+  `;
+}
+
+function renderRisksTab(p){
+  return `
+    <div class="section">
+      <h4>Risks &amp; assumptions</h4>
+      <table class="data-table">
+        <thead><tr><th style="width:35%">Risk / assumption</th><th style="width:40%">Mitigation</th><th>Owner</th><th></th></tr></thead>
+        <tbody>
+        ${p.risks.map((r,i)=>`
+          <tr>
+            <td><textarea onchange="App.updateArrayObjField('${p.id}','risks',${i},'risk',this.value)">${esc(r.risk)}</textarea></td>
+            <td><textarea onchange="App.updateArrayObjField('${p.id}','risks',${i},'mitigation',this.value)">${esc(r.mitigation)}</textarea></td>
+            <td><input value="${esc(r.owner)}" onchange="App.updateArrayObjField('${p.id}','risks',${i},'owner',this.value)"></td>
+            <td class="row-actions"><button class="small danger" onclick="App.removeArrayObj('${p.id}','risks',${i})">✕</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <button class="small add-btn" onclick="App.addArrayObj('${p.id}','risks',{risk:'',mitigation:'',owner:''})">+ Add risk</button>
+    </div>
+  `;
+}
+
+/* ---------------- Main render ---------------- */
+
+function render(){
+  const app = document.getElementById('app');
+  if(!state.currentProjectId){
+    document.getElementById('headerSub').textContent = 'Climate Transition Practice — proposal & bid tracking';
+    app.innerHTML = renderDashboard();
+  } else {
+    const p = getProject(state.currentProjectId);
+    if(!p){ state.currentProjectId = null; return render(); }
+    document.getElementById('headerSub').textContent = p.name;
+    app.innerHTML = renderProject(p);
+  }
+}
+
+/* ---------------- App controller ---------------- */
+
+const App = {
+  goDashboard(){ state.currentProjectId = null; saveState(); render(); },
+  openProject(id){ state.currentProjectId = id; state.activeTab = 'overview'; saveState(); render(); },
+  setTab(tab){ state.activeTab = tab; saveState(); render(); },
+
+  newProject(){
+    const name = prompt('Project name (e.g. tender title):', 'New Proposal');
+    if(name===null) return;
+    const client = prompt('Client:', '') || '';
+    const tenderCode = prompt('Tender / RFQ code:', '') || '';
+    const p = seedTemplateProject();
+    p.id = uid();
+    p.name = name || 'New Proposal';
+    p.client = client;
+    p.tenderCode = tenderCode;
+    p.status = 'Active';
+    p.tasks.forEach(t=>t.id=uid());
+    p.budget.forEach(b=>b.id=uid());
+    p.team.forEach(t=>t.id=uid());
+    p.risks.forEach(r=>r.id=uid());
+    state.projects.push(p);
+    saveState();
+    App.openProject(p.id);
+  },
+
+  duplicateProject(id){
+    const src = getProject(id);
+    if(!src) return;
+    const name = prompt('Name for the new project (copied from "' + src.name + '"):', src.name + ' (copy)');
+    if(name===null) return;
+    const clone = JSON.parse(JSON.stringify(src));
+    clone.id = uid();
+    clone.name = name;
+    clone.status = 'Active';
+    const resetIds = arr => arr.forEach(o=>o.id=uid());
+    resetIds(clone.tasks); resetIds(clone.budget); resetIds(clone.team); resetIds(clone.risks);
+    // reset task statuses for the fresh copy
+    clone.tasks.forEach(t=>t.status='Not started');
+    state.projects.push(clone);
+    saveState();
+    App.openProject(clone.id);
+  },
+
+  deleteProject(id){
+    const p = getProject(id);
+    if(!p) return;
+    if(!confirm(`Delete "${p.name}"? This cannot be undone (export a backup first if unsure).`)) return;
+    state.projects = state.projects.filter(pr=>pr.id!==id);
+    if(state.currentProjectId===id) state.currentProjectId = null;
+    saveState();
+    render();
+  },
+
+  updateField(projId, path, value){
+    const p = getProject(projId);
+    setPath(p, path, value);
+    saveState(); render();
+  },
+
+  updateArrayItem(projId, path, index, value){
+    const p = getProject(projId);
+    const arr = getPath(p, path);
+    arr[index] = value;
+    saveState(); render();
+  },
+  addArrayItem(projId, path){
+    const p = getProject(projId);
+    const arr = getPath(p, path);
+    arr.push('');
+    saveState(); render();
+  },
+  removeArrayItem(projId, path, index){
+    const p = getProject(projId);
+    const arr = getPath(p, path);
+    arr.splice(index,1);
+    saveState(); render();
+  },
+
+  updateListItem(projId, path, index, key, value){
+    const p = getProject(projId);
+    const arr = getPath(p, path);
+    arr[index][key] = value;
+    saveState(); render();
+  },
+  addListItem(projId, path, template){
+    const p = getProject(projId);
+    const arr = getPath(p, path);
+    arr.push(Object.assign({}, template));
+    saveState(); render();
+  },
+  removeListItem(projId, path, index){
+    const p = getProject(projId);
+    const arr = getPath(p, path);
+    arr.splice(index,1);
+    saveState(); render();
+  },
+
+  updateArrayObjField(projId, arrName, index, key, value){
+    const p = getProject(projId);
+    p[arrName][index][key] = value;
+    saveState(); render();
+  },
+  addArrayObj(projId, arrName, template){
+    const p = getProject(projId);
+    const obj = Object.assign({id:uid()}, template);
+    p[arrName].push(obj);
+    saveState(); render();
+  },
+  removeArrayObj(projId, arrName, index){
+    const p = getProject(projId);
+    p[arrName].splice(index,1);
+    saveState(); render();
+  },
+
+  exportAll(){
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bid-management-tool-backup-' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importAll(evt){
+    const file = evt.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const imported = JSON.parse(reader.result);
+        if(!imported.projects) throw new Error('Not a valid backup file');
+        if(confirm('Import will replace all current projects in this browser with the contents of the file. Continue?')){
+          state = imported;
+          state.currentProjectId = null;
+          saveState();
+          render();
+        }
+      } catch(e){
+        alert('Could not read that file: ' + e.message);
+      }
+      evt.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+};
+
+loadState();
+render();
+</script>
+</body>
+</html>

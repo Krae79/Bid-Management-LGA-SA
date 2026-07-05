@@ -1,0 +1,4 @@
+# Keep this repo scoped to the web app only — never commit the bid data workbooks
+*.xlsx
+*.zip
+build_workbook.ps1
