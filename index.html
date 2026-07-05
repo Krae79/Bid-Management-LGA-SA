@@ -24,6 +24,12 @@
   button.accent:hover{background:#c9631d;}
   button.ghost{background:transparent;border-color:transparent;color:#cfe0ec;}
   button.ghost:hover{background:rgba(255,255,255,.12);}
+  .sync-badge{background:transparent;border:1px solid rgba(255,255,255,.3);color:#cfe0ec;font-size:11.5px;}
+  .sync-badge:hover{background:rgba(255,255,255,.12);}
+  .sync-badge.green{border-color:#3ecf8e;color:#a8f0cf;}
+  .sync-badge.amber{border-color:#e8b93f;color:#f3d488;}
+  .sync-badge.red{border-color:#e8695f;color:#f5a89f;}
+  .sync-badge.grey{border-color:rgba(255,255,255,.3);color:#cfe0ec;}
   button.danger{color:var(--red);}
   button.small{padding:4px 9px;font-size:12px;}
   main{max-width:1180px;margin:0 auto;padding:22px 20px 60px;}
@@ -112,6 +118,8 @@
     <div class="sub" id="headerSub">Climate Transition Practice — proposal &amp; bid tracking</div>
   </div>
   <div class="actions">
+    <button class="sync-badge grey" id="syncBadge" onclick="promptForToken()" title="Click to set up or update team sharing">Sync…</button>
+    <button class="ghost" onclick="pollRemote(true)">Refresh</button>
     <button class="ghost" onclick="App.goDashboard()">Dashboard</button>
     <button class="ghost" onclick="App.exportAll()">Export all (JSON)</button>
     <button class="ghost" onclick="document.getElementById('importFile').click()">Import</button>
@@ -327,7 +335,7 @@ function loadState(){
   state = { currentProjectId: null, activeTab: 'overview', projects: [ seedTemplateProject(), seedLGA058959() ] };
   saveState();
 }
-function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); scheduleSync(); }
 function getProject(id){ return state.projects.find(p => p.id === id); }
 function getPath(obj, path){
   return path.split('.').reduce((o,k)=> (o==null?undefined:o[k]), obj);
@@ -337,6 +345,173 @@ function setPath(obj, path, value){
   let cur = obj;
   for(let i=0;i<parts.length-1;i++){ cur = cur[parts[i]]; }
   cur[parts[parts.length-1]] = value;
+}
+
+/* ---------------- GitHub-backed shared sync ----------------
+   Reads/writes projects to a data.json file in the GitHub repo so edits are
+   shared across everyone using the tool, not just saved to one browser.
+   Reading needs no credentials (public repo). Writing needs each person's own
+   personal access token, entered via the "Sync…" button and stored only in
+   their own browser's localStorage — never committed to the repo. */
+
+const GH_OWNER = 'Krae79';
+const GH_REPO = 'Bid-Management-LGA-SA';
+const GH_BRANCH = 'main';
+const GH_DATA_PATH = 'data.json';
+const GH_TOKEN_KEY = 'bidToolGhToken_v1';
+
+function getGhToken(){ return localStorage.getItem(GH_TOKEN_KEY) || ''; }
+function setGhToken(t){ if(t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); }
+
+function utf8ToBase64(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
+const sync = { status:'idle', lastSyncedAt:null, lastError:null, lastPushedJSON:null, pending:false, timer:null };
+
+function timeAgo(d){
+  const s = Math.round((Date.now() - d.getTime())/1000);
+  if(s<10) return 'just now';
+  if(s<60) return s+'s ago';
+  const m = Math.round(s/60);
+  if(m<60) return m+'m ago';
+  return Math.round(m/60)+'h ago';
+}
+
+function renderSyncBadge(){
+  const el = document.getElementById('syncBadge');
+  if(!el) return;
+  const hasToken = !!getGhToken();
+  let label, cls;
+  if(sync.status === 'syncing'){ label = 'Syncing…'; cls = 'grey'; }
+  else if(sync.status === 'error'){ label = 'Sync error ⚠'; cls = 'red'; }
+  else if(sync.status === 'offline'){ label = 'Offline (local only)'; cls = 'amber'; }
+  else if(!hasToken){ label = 'Read-only — add token'; cls = 'amber'; }
+  else if(sync.lastSyncedAt){ label = 'Synced ' + timeAgo(sync.lastSyncedAt); cls = 'green'; }
+  else { label = 'Sync…'; cls = 'grey'; }
+  el.textContent = label;
+  el.className = 'sync-badge ' + cls;
+  el.title = sync.lastError ? ('Sync issue: ' + sync.lastError + ' — click to update your token') :
+    (hasToken ? 'Click to update your GitHub sync token' : 'Click to add a GitHub token so your edits sync to the whole team');
+}
+
+async function fetchRemoteProjects(){
+  const url = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_DATA_PATH}?_=${Date.now()}`;
+  const res = await fetch(url, { cache:'no-store' });
+  if(!res.ok) throw new Error('could not fetch shared data (status ' + res.status + ')');
+  const data = await res.json();
+  if(!data || !Array.isArray(data.projects)) throw new Error('shared data.json is malformed');
+  return data.projects;
+}
+
+async function pushRemoteProjects(projects){
+  const token = getGhToken();
+  if(!token) return false;
+  const apiBase = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_DATA_PATH}`;
+  const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' };
+  let sha;
+  const getRes = await fetch(apiBase + `?ref=${GH_BRANCH}&_=${Date.now()}`, { headers });
+  if(getRes.status === 200){ sha = (await getRes.json()).sha; }
+  else if(getRes.status !== 404){ throw new Error('could not read current file (status ' + getRes.status + ')'); }
+  const body = {
+    message: 'Update bid data via web app — ' + new Date().toISOString(),
+    content: utf8ToBase64(JSON.stringify({ projects }, null, 2)),
+    branch: GH_BRANCH
+  };
+  if(sha) body.sha = sha;
+  const putRes = await fetch(apiBase, { method:'PUT', headers: Object.assign({'Content-Type':'application/json'}, headers), body: JSON.stringify(body) });
+  if(putRes.status === 401) throw new Error('token invalid or expired');
+  if(putRes.status === 403) throw new Error('token lacks write permission on this repo');
+  if(putRes.status === 409) throw new Error('someone else saved at the same moment — click Refresh and reapply your change');
+  if(!putRes.ok) throw new Error('push failed (status ' + putRes.status + ')');
+  return true;
+}
+
+function scheduleSync(){
+  if(typeof state === 'undefined' || !state || !state.projects) return;
+  const json = JSON.stringify(state.projects);
+  if(json === sync.lastPushedJSON) return;
+  sync.pending = true;
+  if(sync.timer) clearTimeout(sync.timer);
+  sync.timer = setTimeout(doSyncPush, 2000);
+}
+
+async function doSyncPush(){
+  if(!sync.pending) return;
+  if(!getGhToken()){ renderSyncBadge(); return; }
+  const json = JSON.stringify(state.projects);
+  sync.status = 'syncing'; renderSyncBadge();
+  try {
+    await pushRemoteProjects(state.projects);
+    sync.lastPushedJSON = json;
+    sync.lastSyncedAt = new Date();
+    sync.status = 'synced';
+    sync.lastError = null;
+    sync.pending = false;
+  } catch(e){
+    sync.status = 'error';
+    sync.lastError = e.message;
+  }
+  renderSyncBadge();
+}
+
+async function pollRemote(manual){
+  try {
+    const active = document.activeElement;
+    const editing = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName) && document.getElementById('app').contains(active);
+    if(!manual && (editing || sync.pending)) return;
+    const remoteProjects = await fetchRemoteProjects();
+    const remoteJSON = JSON.stringify(remoteProjects);
+    if(remoteJSON !== JSON.stringify(state.projects)){
+      state.projects = remoteProjects;
+      sync.lastPushedJSON = remoteJSON;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      render();
+    }
+    sync.lastSyncedAt = new Date();
+    sync.lastError = null;
+    sync.status = getGhToken() ? 'synced' : 'idle';
+  } catch(e){
+    sync.status = getGhToken() ? 'error' : 'offline';
+    sync.lastError = e.message;
+  }
+  renderSyncBadge();
+}
+
+async function initialSyncLoad(){
+  sync.status = 'syncing'; renderSyncBadge();
+  try {
+    const remoteProjects = await fetchRemoteProjects();
+    state.projects = remoteProjects;
+    sync.lastPushedJSON = JSON.stringify(remoteProjects);
+    if(state.currentProjectId && !remoteProjects.find(p=>p.id===state.currentProjectId)){
+      state.currentProjectId = null;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    render();
+    sync.lastSyncedAt = new Date();
+    sync.lastError = null;
+    sync.status = getGhToken() ? 'synced' : 'idle';
+  } catch(e){
+    sync.status = 'offline';
+    sync.lastError = e.message;
+  }
+  renderSyncBadge();
+}
+
+function promptForToken(){
+  const current = getGhToken();
+  const val = prompt(
+    'Paste a GitHub fine-grained personal access token, scoped ONLY to the ' + GH_OWNER + '/' + GH_REPO + ' repo, with "Contents: Read and write" permission.\n\nStored only in this browser — never sent anywhere except github.com, and never committed to the repo. Leave blank and click OK to remove your saved token.',
+    current
+  );
+  if(val === null) return;
+  setGhToken(val.trim());
+  renderSyncBadge();
+  if(val.trim()) doSyncPush();
 }
 
 /* ---------------- Helpers ---------------- */
@@ -833,6 +1008,9 @@ const App = {
 
 loadState();
 render();
+renderSyncBadge();
+initialSyncLoad();
+setInterval(pollRemote, 20000);
 </script>
 </body>
 </html>
