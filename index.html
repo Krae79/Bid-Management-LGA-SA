@@ -399,12 +399,26 @@ function renderSyncBadge(){
 }
 
 async function fetchRemoteProjects(){
-  const url = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_DATA_PATH}?_=${Date.now()}`;
-  const res = await fetch(url, { cache:'no-store' });
-  if(!res.ok) throw new Error('could not fetch shared data (status ' + res.status + ')');
-  const data = await res.json();
-  if(!data || !Array.isArray(data.projects)) throw new Error('shared data.json is malformed');
-  return data.projects;
+  // Fast path: public raw content — works without auth, high rate limit. Fine while the repo is public.
+  try {
+    const url = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_DATA_PATH}?_=${Date.now()}`;
+    const res = await fetch(url, { cache:'no-store' });
+    if(res.ok){
+      const data = await res.json();
+      if(data && Array.isArray(data.projects)) return data.projects;
+    }
+  } catch(e){ /* fall through to authenticated path below */ }
+
+  // Fallback: authenticated Contents API — required if the repo is private, since raw.githubusercontent.com
+  // returns 404 for private files without a token.
+  const token = getGhToken();
+  if(!token) throw new Error('could not fetch shared data (repo may be private — add a token via Sync…)');
+  const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_DATA_PATH}?ref=${GH_BRANCH}&_=${Date.now()}`;
+  const res2 = await fetch(apiUrl, { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github.raw+json' } });
+  if(!res2.ok) throw new Error('could not fetch shared data (status ' + res2.status + ')');
+  const data2 = await res2.json();
+  if(!data2 || !Array.isArray(data2.projects)) throw new Error('shared data.json is malformed');
+  return data2.projects;
 }
 
 async function pushRemoteProjects(projects){
